@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 static const unsigned char sbox[0x100] = {
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c,
@@ -142,42 +141,9 @@ void key_expansion(const unsigned char* key, unsigned char* expanded_keys) {
     }
 }
 
-void keygen(unsigned char* key, size_t size) {
-    for (size_t i = 0; i < size; i++)
+void keygen(unsigned char* key, unsigned int size) {
+    for (unsigned int i = 0; i < size; i++)
         key[i] = rand() % 0x100;
-}
-
-void print_key(const unsigned char* key, size_t size) {
-    for (size_t i = 0; i < size; i++) {
-        printf("%02x ", key[i]);
-    }
-    printf("\n");
-}
-
-void print_state(const unsigned char* state) {
-    printf("State:\n");
-    for (int i = 0; i < 16; i++) {
-        printf("%02x ", state[i]);
-    }
-    printf("\n");
-}
-
-void print_encrypted(const char* msg, const unsigned char* encrypted, const unsigned char* decrypted) {
-    printf("Original Message:\n");
-    for (int i = 0; i < 16; i++) {
-        printf("%02x ", (unsigned char)msg[i]);
-    }
-    printf("\n");
-
-    printf("Encrypted Message:\n");
-    for (int i = 0; i < 16; i++) {
-        printf("%02x ", encrypted[i]);
-    }
-    printf("\n");
-
-    printf("Decrypted Message:\n");
-    printf("%s", decrypted);
-    printf("\n");
 }
 
 void add_round_key(const unsigned char* key, unsigned char* state) {
@@ -284,17 +250,16 @@ void inv_mix_columns(unsigned char* state) {
     }
 }
 
-void pad_block(unsigned char* block, size_t size) {
+void pad_block(unsigned char* block, unsigned int size) {
     block[size] = 0b10000000;
-    for (size_t i = size + 1; i < 16; i++) {
+    for (unsigned int i = size + 1; i < 16; i++) {
         block[i] = 0;
     }
 }
 
-size_t unpad_block(unsigned char* block) {
-    size_t i = 15;
+unsigned int unpad_block(unsigned char* block) {
+    unsigned int i = 15;
     while (i > 0) {
-        // printf("i: %ld\n", i);
         if (block[i] == 0x80)
             return i;
         i--;
@@ -302,12 +267,12 @@ size_t unpad_block(unsigned char* block) {
     return 15;
 }
 
-size_t alloc_blocks(const char* msg, const size_t size, unsigned char** out_blocks) {
-    size_t         block_count = size / 16 + (size % 16 != 0 ? 1 : 0);
+unsigned int alloc_blocks(const char* msg, const unsigned int size, unsigned char** out_blocks) {
+    unsigned int   block_count = size / 16 + (size % 16 != 0 ? 1 : 0);
     unsigned char* blocks = (unsigned char*)malloc(block_count * 16);
-    for (size_t i = 0; i < block_count; i++) {
-        size_t copy_size = (i == block_count - 1 && size % 16 != 0) ? size % 16 : 16;
-        for (size_t j = 0; j < copy_size; j++) {
+    for (unsigned int i = 0; i < block_count; i++) {
+        unsigned int copy_size = (i == block_count - 1 && size % 16 != 0) ? size % 16 : 16;
+        for (unsigned int j = 0; j < copy_size; j++) {
             blocks[i * 16 + j] = (unsigned char)msg[i * 16 + j];
         }
         if (copy_size < 16) {
@@ -319,15 +284,13 @@ size_t alloc_blocks(const char* msg, const size_t size, unsigned char** out_bloc
 }
 
 void rounds(unsigned char* key, const unsigned char* last_state, unsigned char* state) {
-    print_state(state);
-    // if (last_state != NULL) {
-    //     for (int i = 0; i < 16; i++) {
-    //         state[i] ^= last_state[i];
-    //     }
-    // }
+    if (last_state != NULL) {
+        for (int i = 0; i < 16; i++) {
+            state[i] ^= last_state[i];
+        }
+    }
     // initial round key addition
     add_round_key(key, state);
-    print_state(state);
 
     // 9 rounds
     for (int round = 1; round <= 9; round++) {
@@ -337,7 +300,6 @@ void rounds(unsigned char* key, const unsigned char* last_state, unsigned char* 
 
         const unsigned char* round_key = key + round * 16;
         add_round_key(round_key, state);
-        print_state(state);
     }
 
     // final round, i.e; 10 rounds
@@ -345,22 +307,14 @@ void rounds(unsigned char* key, const unsigned char* last_state, unsigned char* 
     shift_rows(state);
     const unsigned char* round_key = key + 10 * 16;
     add_round_key(round_key, state);
-    print_state(state);
 }
 
 void inv_rounds(unsigned char* key, unsigned char* last_state, unsigned char* state) {
-    print_state(state);
-    // if (last_state != NULL) {
-    //     for (int i = 0; i < 16; i++) {
-    //         state[i] ^= last_state[i];
-    //     }
-    // }
     // initial round key addition
     const unsigned char* round_key = key + 10 * 16;
     add_round_key(round_key, state);
     inv_shift_rows(state);
     inv_sub_bytes(state);
-    print_state(state);
 
     // 9 rounds
     for (int round = 9; round >= 1; round--) {
@@ -369,85 +323,72 @@ void inv_rounds(unsigned char* key, unsigned char* last_state, unsigned char* st
         inv_mix_columns(state);
         inv_shift_rows(state);
         inv_sub_bytes(state);
-        print_state(state);
     }
 
     // final round, i.e; 10 rounds
     round_key = key;
     add_round_key(round_key, state);
-    print_state(state);
-}
 
-int main() {
-    srand(time(NULL));
-    unsigned char key[16] = {0};
-    unsigned char expanded_keys[176]; // 11 * 16
-
-    // keygen(key, 16);
-    key_expansion(key, expanded_keys);
-
-    // print original key
-    printf("Original Key:\n");
-    for (int i = 0; i < 16; i++) {
-        printf("%02x ", key[i]);
-    }
-
-    // print expanded keys
-    printf("\n\nExpanded Keys:\n");
-    for (int i = 0; i < 176; i++) {
-        printf("%02x ", expanded_keys[i]);
-        if ((i + 1) % 16 == 0) {
-            printf("\n");
+    if (last_state != NULL) {
+        for (int i = 0; i < 16; i++) {
+            state[i] ^= last_state[i];
         }
     }
+}
 
-    printf("\n");
+unsigned char* encrypt(unsigned char* key, void* data, unsigned int size, unsigned int* out_block_count) {
+    unsigned char* state = NULL;
+    unsigned int   block_count = alloc_blocks(data, size, &state);
+    *out_block_count = block_count;
 
-    // const char msg[] = {0xf3, 0x44, 0x81, 0xec, 0x3c, 0xc6, 0x27, 0xba, 0xcd, 0x5d, 0xc3, 0xfb, 0x08, 0xf2, 0x73, 0xe6};
-    const char msg[] = "This is a top secret.";
-
-    unsigned char* state;
-    size_t         block_count = alloc_blocks(msg, sizeof(msg), &state);
-
-    printf("\nEncrypting Block 0:\n");
-    rounds(expanded_keys, NULL, state);
+    rounds(key, NULL, state);
     for (int i = 1; i < block_count; i++) {
-        printf("\nEncrypting Block %d:\n", i);
-        rounds(expanded_keys, &state[(i - 1) * 16], &state[i * 16]);
+        rounds(key, &state[(i - 1) * 16], &state[i * 16]);
     }
-    printf("\n");
 
+    return state;
+}
+
+unsigned char* decrypt(unsigned char* key, unsigned char* state, unsigned int block_count) {
     unsigned char* decrypt_state = (unsigned char*)malloc(block_count * 16);
     for (int j = 0; j < 16 * block_count; j++) {
         decrypt_state[j] = state[j];
     }
 
-    printf("Decrypting\n");
-
-    printf("\nDecrypting Block 0:\n");
-    inv_rounds(expanded_keys, NULL, &decrypt_state[0]);
+    inv_rounds(key, NULL, &decrypt_state[0]);
     for (int i = 1; i < block_count; i++) {
-        printf("\nDecrypting Block %d:\n", i);
-        inv_rounds(expanded_keys, &state[(i - 1) * 16], &decrypt_state[i * 16]);
-    }
-    printf("\n");
-    for (int i = 16; i < 16 * block_count; i++) {
-        printf("%d ", decrypt_state[i]);
+        inv_rounds(key, &state[(i - 1) * 16], &decrypt_state[i * 16]);
     }
 
-    size_t last_block_size = unpad_block(&decrypt_state[(block_count - 1) * 16]);
+    unsigned int   last_block_size = unpad_block(&decrypt_state[(block_count - 1) * 16]);
     unsigned char* final_msg = (unsigned char*)malloc((block_count - 1) * 16 + last_block_size + 1);
     for (int i = 0; i < block_count - 1; i++) {
         for (int j = 0; j < 16; j++) {
             final_msg[i * 16 + j] = decrypt_state[i * 16 + j];
         }
     }
-    for (size_t j = 0; j < last_block_size; j++) {
+    for (unsigned int j = 0; j < last_block_size; j++) {
         final_msg[(block_count - 1) * 16 + j] = decrypt_state[(block_count - 1) * 16 + j];
     }
-    printf("Last block size: %zu\n", last_block_size);
+    free(decrypt_state);
 
-    print_encrypted(msg, state, final_msg);
+    return final_msg;
+}
 
+int main() {
+    unsigned char key[16] = {0};
+    unsigned char expanded_keys[176]; // 11 * 16
+
+    key_expansion(key, expanded_keys);
+
+    const char   msg[] = "This is a top secret.";
+    unsigned int block_count = 0;
+
+    unsigned char* state = encrypt(expanded_keys, (void*)msg, sizeof(msg), &block_count);
+    unsigned char* final_msg = decrypt(expanded_keys, state, block_count);
+    free(state);
+
+    printf("Decrypted message: %s\n", final_msg);
+    free(final_msg);
     return 0;
 }
