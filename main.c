@@ -1,7 +1,14 @@
 // AES-128
-#include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
-#include <string.h>
+#include "img.h"
+
+struct state {
+    unsigned char encryption_state[SIZE + 1];
+    unsigned char decryption_state[SIZE + 1];
+} typedef state_t;
+
+volatile state_t* global_state = (volatile state_t*)0x2000000;
 
 static const unsigned char sbox[0x100] = {
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c,
@@ -141,11 +148,6 @@ void key_expansion(const unsigned char* key, unsigned char* expanded_keys) {
     }
 }
 
-void keygen(unsigned char* key, unsigned int size) {
-    for (unsigned int i = 0; i < size; i++)
-        key[i] = rand() % 0x100;
-}
-
 void add_round_key(const unsigned char* key, unsigned char* state) {
     for (int i = 0; i < 16; i++) {
         state[i] ^= key[i];
@@ -269,7 +271,7 @@ unsigned int unpad_block(unsigned char* block) {
 
 unsigned int alloc_blocks(const char* msg, const unsigned int size, unsigned char** out_blocks) {
     unsigned int   block_count = size / 16 + (size % 16 != 0 ? 1 : 0);
-    unsigned char* blocks = (unsigned char*)malloc(block_count * 16);
+    unsigned char* blocks = (unsigned char*)global_state->encryption_state;
     for (unsigned int i = 0; i < block_count; i++) {
         unsigned int copy_size = (i == block_count - 1 && size % 16 != 0) ? size % 16 : 16;
         for (unsigned int j = 0; j < copy_size; j++) {
@@ -350,7 +352,7 @@ unsigned char* encrypt(unsigned char* key, void* data, unsigned int size, unsign
 }
 
 unsigned char* decrypt(unsigned char* key, unsigned char* state, unsigned int block_count) {
-    unsigned char* decrypt_state = (unsigned char*)malloc(block_count * 16);
+    unsigned char* decrypt_state = (unsigned char*)global_state->decryption_state;
     for (int j = 0; j < 16 * block_count; j++) {
         decrypt_state[j] = state[j];
     }
@@ -360,35 +362,122 @@ unsigned char* decrypt(unsigned char* key, unsigned char* state, unsigned int bl
         inv_rounds(key, &state[(i - 1) * 16], &decrypt_state[i * 16]);
     }
 
-    unsigned int   last_block_size = unpad_block(&decrypt_state[(block_count - 1) * 16]);
-    unsigned char* final_msg = (unsigned char*)malloc((block_count - 1) * 16 + last_block_size + 1);
-    for (int i = 0; i < block_count - 1; i++) {
-        for (int j = 0; j < 16; j++) {
-            final_msg[i * 16 + j] = decrypt_state[i * 16 + j];
+    return decrypt_state;
+}
+
+// Interactivity
+extern void print(const char*);
+extern void print_dec(unsigned int);
+extern void enable_interrupts();
+
+unsigned char key[16] = {0};
+unsigned int  current_byte = 0;
+
+/* Your code goes into main as well as any needed functions. */
+void set_leds(int led_mask) {
+    volatile int* leds = (int*)0x04000000;
+
+    *leds = led_mask;
+}
+
+void set_displays(int display_number, int value) {
+    volatile char* display = (char*)0x04000050 + display_number * 0x10;
+
+    switch (value) {
+        case 0: *display = 0b11000000; break;
+        case 1: *display = 0b11111001; break;
+        case 2: *display = 0b10100100; break;
+        case 3: *display = 0b10110000; break;
+        case 4: *display = 0b10011001; break;
+        case 5: *display = 0b10010010; break;
+        case 6: *display = 0b10000010; break;
+        case 7: *display = 0b11111000; break;
+        case 8: *display = 0b10000000; break;
+        case 9: *display = 0b10011000; break;
+    }
+}
+
+int get_sw(void) {
+    volatile int* sw = (int*)0x04000010;
+
+    return *sw & 0x000003ff;
+}
+
+int get_btn(void) {
+    volatile int* btn = (int*)0x040000d0;
+
+    return *btn;
+}
+
+void handle_button() {
+    volatile int* clear = (int*)0x40000dc;
+    *clear = 0xffffffff;
+
+    if ((get_sw() & 0x200) == 0) {
+        if (get_sw() == 0) {
+
+        } else if (get_sw() == 1) {
+        }
+    } else {
+        if ((get_sw() & 0x100) == 0x100) {
+            current_byte = 0;
+            for (int i = 0; i < 16; i++) {
+                key[i] = 0;
+            }
+        } else {
+            key[current_byte] = get_sw() & 0xff;
         }
     }
-    for (unsigned int j = 0; j < last_block_size; j++) {
-        final_msg[(block_count - 1) * 16 + j] = decrypt_state[(block_count - 1) * 16 + j];
-    }
-    free(decrypt_state);
+}
 
-    return final_msg;
+void handle_switch() {
+    volatile int* clear = (int*)0x400001c;
+    *clear = 0xffffffff;
+
+    set_leds(get_sw());
+}
+
+/* Below is the function that will be called when an interrupt is triggered. */
+void handle_interrupt(unsigned cause) {
+    switch ((cause << 1) >> 1) {
+        case 17: handle_switch(); break;
+        case 18: handle_button(); break;
+        default: break;
+    }
+}
+
+/* Add your code here for initializing interrupts. */
+void labinit(void) {
+    volatile int* btn = (int*)0x040000d8;
+    volatile int* sw = (int*)0x04000018;
+
+    *btn = 0xffffffff;
+    *sw = 0xffffffff;
+
+    enable_interrupts();
 }
 
 int main() {
-    unsigned char key[16] = {0};
+    volatile char* VGA = (volatile char*)0x08000000;
+
     unsigned char expanded_keys[176]; // 11 * 16
 
     key_expansion(key, expanded_keys);
 
-    const char   msg[] = "This is a top secret.";
     unsigned int block_count = 0;
 
-    unsigned char* state = encrypt(expanded_keys, (void*)msg, sizeof(msg), &block_count);
-    unsigned char* final_msg = decrypt(expanded_keys, state, block_count);
-    free(state);
+    for (int i = 0; i < 320 * 480; i++)
+        VGA[i] = img[i];
 
-    printf("Decrypted message: %s\n", final_msg);
-    free(final_msg);
+    unsigned char* state = encrypt(expanded_keys, (void*)img, sizeof(img), &block_count);
+
+    for (int i = 0; i < 320 * 480; i++)
+        VGA[i] = *(state + i);
+
+    unsigned char* final_msg = decrypt(expanded_keys, state, block_count);
+
+    for (int i = 0; i < 320 * 480; i++)
+        VGA[i] = *(final_msg + i);
+
     return 0;
 }
