@@ -16,6 +16,10 @@ unsigned char     expanded_keys[176]; // 11 * 16
 volatile char*    VGA = (volatile char*)0x08000000;
 volatile state_t* global_state = (volatile state_t*)0x2000000;
 
+/*
+ * Everything until the next acknowledgment is written by Oskar Engström
+ * */
+
 // Lookup tables for SBox
 static const unsigned char sbox[0x100] = {
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c,
@@ -269,7 +273,7 @@ void pad_block(unsigned char* block, unsigned int size) {
     }
 }
 
-// Check if block contains pading signature and return unpaded block
+// Check if block contains pading signature and return size of final unpaded block
 unsigned int unpad_block(unsigned char* block) {
     unsigned int i = 15;
     while (i > 0) {
@@ -385,6 +389,10 @@ unsigned char* decrypt(unsigned char* key, unsigned int block_count) {
 
     return decrypt_state;
 }
+
+/*
+ * Everything below is written by Viktor Ekby
+ * */
 
 // Interactivity
 extern void print(const char*);
