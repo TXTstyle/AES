@@ -11,9 +11,10 @@ Switches on the board are used control the program:
 |------------|----------------------------|
 | 1          | Encryption/Decryption      |
 | 2          | ECB/CBC                    |
+| 9          | Reset key                  |
 | 10         | Insert key                 |
 
-In key insert mode, the first 8 switches are used to input the 128-bit key in 16 steps (8 bits at a time). To input a set 8 bits, set the switches(switch 1-8) and then push the button (*btn_1*). Switch 9 resets the key input process. The 7 segement display displays the number of bytes entered so far.
+In key insert mode, the first 8 switches are used to input the 128-bit key in 16 steps (8 bits at a time). To input a set 8 bits, set the switches(switch 1-8) and then push the button (*btn_1*). Switch 9 resets the key input process. The 7 segement display displays the number of bytes entered so far. Encryption and decryption can only be done after a key has been inserted.
 
 ## Run
 
